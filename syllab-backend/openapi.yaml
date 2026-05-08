@@ -1,0 +1,1538 @@
+openapi: 3.0.3
+info:
+  title: SylLab API
+  description: |
+    Anti-Plagiarism Code Forensics Platform.
+    Establishes proctored Week 1 baselines and detects AI-assisted code submissions
+    through AST-based sophistication scoring and cohort comparison.
+  version: 1.0.0
+  contact:
+    name: SylLab Support
+    email: support@syllab.io
+
+servers:
+  - url: https://api.syllab.io/v1
+    description: Production
+  - url: http://localhost:3000/v1
+    description: Local development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: auth
+    description: Authentication and token management
+  - name: sessions
+    description: Proctored Week 1 baseline sessions
+  - name: submissions
+    description: Code submission and analysis
+  - name: cohorts
+    description: Cohort statistics and aggregations
+  - name: instructor
+    description: Instructor action queue and review
+  - name: students
+    description: Student profile and trajectory
+  - name: admin
+    description: Platform administration
+
+# ─────────────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── AUTH ──────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new user
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            example:
+              email: alice@university.edu
+              password: Str0ng!Pass
+              full_name: Alice Nurlanovna
+              role: STUDENT
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c3ItMDAxIn0.abc
+                refresh_token: rt_7f3kd92md0xp1q
+                expires_in: 86400
+                user:
+                  id: usr-001
+                  email: alice@university.edu
+                  full_name: Alice Nurlanovna
+                  role: STUDENT
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login and receive JWT tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              email: alice@university.edu
+              password: Str0ng!Pass
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+                  example: rt_7f3kd92md0xp1q
+      responses:
+        '200':
+          description: New access token issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+                  expires_in:
+                    type: integer
+                    example: 86400
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Revoke refresh token
+      responses:
+        '204':
+          description: Logged out successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── SESSIONS ──────────────────────────────────────────────────────────────
+  /sessions:
+    post:
+      tags: [sessions]
+      summary: Create a proctored baseline session (Instructor/Proctor only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+            example:
+              course_id: crs-101
+              scheduled_at: '2025-09-01T09:00:00Z'
+              duration_minutes: 30
+              room_label: Lab A-204
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    get:
+      tags: [sessions]
+      summary: List sessions for a course
+      parameters:
+        - name: course_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: crs-101
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated session list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{session_id}/open:
+    patch:
+      tags: [sessions]
+      summary: Open session — allow student baseline submissions
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [network_isolation_confirmed]
+              properties:
+                network_isolation_confirmed:
+                  type: boolean
+                  description: Proctor must confirm room is network-isolated
+                  example: true
+      responses:
+        '200':
+          description: Session opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{session_id}/close:
+    patch:
+      tags: [sessions]
+      summary: Close session — no further baseline submissions accepted
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session closed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{session_id}/baseline:
+    post:
+      tags: [sessions]
+      summary: Submit Week 1 baseline code (Student only, session must be open)
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BaselineSubmitRequest'
+            example:
+              language: python
+              code: "def add(a, b):\n    return a + b\n"
+      responses:
+        '201':
+          description: Baseline captured and locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaselineRecord'
+              example:
+                id: base-001
+                student_id: usr-001
+                session_id: sess-001
+                content_hash: sha256:3b4c...
+                locked_at: '2025-09-01T09:28:00Z'
+                sophistication_summary:
+                  total_score: 12
+                  error_handling_tier: 0
+                  architecture_tier: 0
+                  type_safety_score: 0
+                  has_decorators: false
+                  has_async: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Baseline already submitted for this course
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: BASELINE_ALREADY_EXISTS
+                message: Student already has a locked baseline for this course
+                status: 409
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /sessions/{session_id}/attendance:
+    get:
+      tags: [sessions]
+      summary: Get baseline submission attendance report for a session
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Attendance list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── SUBMISSIONS ───────────────────────────────────────────────────────────
+  /submissions/analyze:
+    post:
+      tags: [submissions]
+      summary: Submit code for one-shot forensic analysis
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+            example:
+              course_id: crs-101
+              week_number: 4
+              language: python
+              code: "from functools import wraps\nimport asyncio\n\nclass ServiceError(Exception):\n    pass\n\ndef retry(max_attempts=3):\n    def decorator(fn):\n        @wraps(fn)\n        async def wrapper(*args, **kwargs):\n            for i in range(max_attempts):\n                try:\n                    return await fn(*args, **kwargs)\n                except ServiceError:\n                    if i == max_attempts - 1:\n                        raise\n        return wrapper\n    return decorator\n"
+      responses:
+        '200':
+          description: Analysis complete
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisResult'
+              example:
+                submission_id: sub-042
+                flag_level: REVIEW
+                ensemble_score: 2.1
+                score_breakdown:
+                  trajectory_z: 2.8
+                  genealogy_penalty: 1.5
+                  cohort_outlier: 0.9
+                  weights:
+                    trajectory: 0.5
+                    genealogy: 0.3
+                    cohort: 0.2
+                sophistication:
+                  total_score: 68
+                  error_handling_tier: 3
+                  architecture_tier: 2
+                  type_safety_score: 1
+                  has_decorators: true
+                  has_async: true
+                  has_context_managers: false
+                  has_metaclasses: false
+                genealogy_violations:
+                  - technique: retry_decorator
+                    missing_prerequisite: context_managers
+                    severity: 0.5
+                cohort_position:
+                  week_number: 4
+                  percentile: 94.2
+                  cohort_mean: 41.3
+                  cohort_std: 11.2
+                weeks_compressed: 7.2
+                baseline_score: 12
+                expected_score_week4: 30.8
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: No baseline found for student in this course
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: BASELINE_NOT_FOUND
+                message: No locked baseline found for student in course crs-101
+                status: 404
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /submissions/{submission_id}:
+    get:
+      tags: [submissions]
+      summary: Get full forensic report for a submission
+      parameters:
+        - name: submission_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: sub-042
+      responses:
+        '200':
+          description: Full submission report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionReport'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /submissions:
+    get:
+      tags: [submissions]
+      summary: List submissions for a student or course
+      parameters:
+        - name: student_id
+          in: query
+          schema:
+            type: string
+          example: usr-001
+        - name: course_id
+          in: query
+          schema:
+            type: string
+          example: crs-101
+        - name: week_number
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          example: 4
+        - name: flag_level
+          in: query
+          schema:
+            type: string
+            enum: [NORMAL, MONITOR, REVIEW, INTERVIEW]
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, -created_at, ensemble_score, -ensemble_score]
+            default: -created_at
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated submissions list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── COHORTS ───────────────────────────────────────────────────────────────
+  /cohorts/{cohort_id}/stats:
+    get:
+      tags: [cohorts]
+      summary: Get aggregated sophistication statistics for a cohort by week
+      parameters:
+        - name: cohort_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: cohort-2025-cs101
+        - name: week
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+          example: 4
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [week_number, -week_number]
+            default: week_number
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Cohort statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CohortStatsResponse'
+              example:
+                data:
+                  cohort_id: cohort-2025-cs101
+                  week_number: 4
+                  submission_count: 38
+                  mean_score: 41.3
+                  std_dev: 11.2
+                  p10: 22.0
+                  p50: 40.5
+                  p90: 57.8
+                  p90_threshold: 57.8
+                  flag_distribution:
+                    NORMAL: 28
+                    MONITOR: 6
+                    REVIEW: 3
+                    INTERVIEW: 1
+                pagination:
+                  next_cursor: null
+                  has_more: false
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── INSTRUCTOR QUEUE ──────────────────────────────────────────────────────
+  /instructor/queue:
+    get:
+      tags: [instructor]
+      summary: Get prioritized action queue of flagged submissions
+      parameters:
+        - name: course_id
+          in: query
+          schema:
+            type: string
+          example: crs-101
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [PENDING, REVIEWED, CLEARED, CONFIRMED]
+            default: PENDING
+        - name: min_score
+          in: query
+          schema:
+            type: number
+            format: float
+          example: 1.5
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [priority_score, -priority_score, created_at, -created_at]
+            default: -priority_score
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated action queue
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instructor/queue/{queue_id}:
+    get:
+      tags: [instructor]
+      summary: Get full queue item with LLM guidance
+      parameters:
+        - name: queue_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: q-007
+      responses:
+        '200':
+          description: Queue item detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueItem'
+              example:
+                id: q-007
+                submission_id: sub-042
+                student:
+                  id: usr-001
+                  full_name: Alice Nurlanovna
+                priority_score: 2.1
+                status: PENDING
+                llm_guidance: "Ask the student to explain the retry decorator implementation at line 12. Focus on why wraps() is used and what functools provides. Verify understanding of closure scope."
+                created_at: '2025-10-14T11:30:00Z'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /instructor/queue/{queue_id}/resolve:
+    patch:
+      tags: [instructor]
+      summary: Resolve a queue item after instructor review
+      parameters:
+        - name: queue_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: q-007
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveQueueRequest'
+            example:
+              status: CLEARED
+              instructor_note: Student explained the implementation correctly during oral review.
+      responses:
+        '200':
+          description: Queue item resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueueItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Item already resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: ALREADY_RESOLVED
+                message: Queue item q-007 is already in status CLEARED
+                status: 409
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── STUDENTS ──────────────────────────────────────────────────────────────
+  /students/{student_id}/trajectory:
+    get:
+      tags: [students]
+      summary: Get historical sophistication trajectory across weeks
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: usr-001
+        - name: course_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: crs-101
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Trajectory data by week
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrajectoryResponse'
+              example:
+                student_id: usr-001
+                course_id: crs-101
+                baseline_score: 12
+                data:
+                  - week_number: 1
+                    score: 12
+                    expected_score: 12
+                    flag_level: NORMAL
+                    ensemble_score: 0.3
+                  - week_number: 4
+                    score: 68
+                    expected_score: 30.8
+                    flag_level: REVIEW
+                    ensemble_score: 2.1
+                pagination:
+                  next_cursor: null
+                  has_more: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /students/{student_id}/baseline:
+    get:
+      tags: [students]
+      summary: Get student baseline record (features only, no raw code for students)
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: usr-001
+        - name: course_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: crs-101
+      responses:
+        '200':
+          description: Baseline features
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BaselineRecord'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  # ── ADMIN ─────────────────────────────────────────────────────────────────
+  /admin/prerequisites:
+    get:
+      tags: [admin]
+      summary: List technique prerequisite graph
+      parameters:
+        - $ref: '#/components/parameters/CursorParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Prerequisite graph entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrerequisiteListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [admin]
+      summary: Add or update a technique prerequisite rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrerequisiteRule'
+            example:
+              technique: circuit_breaker
+              requires: [decorators, context_managers]
+              severity_weight: 0.5
+      responses:
+        '201':
+          description: Rule created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrerequisiteRule'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+# ─────────────────────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from /auth/login.
+        Include as: Authorization: Bearer <token>
+        Tokens expire after 24 hours.
+
+  parameters:
+    CursorParam:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+      description: |
+        Cursor for keyset pagination. Pass the value of `next_cursor`
+        from the previous response. Omit for first page.
+      example: eyJpZCI6InN1Yi0wNDIifQ
+
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Number of items per page
+      example: 20
+
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+      example: sess-001
+
+  schemas:
+
+    # ── AUTH ────────────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [email, password, full_name, role]
+      properties:
+        email:
+          type: string
+          format: email
+          example: alice@university.edu
+        password:
+          type: string
+          minLength: 8
+          example: Str0ng!Pass
+        full_name:
+          type: string
+          example: Alice Nurlanovna
+        role:
+          type: string
+          enum: [STUDENT, INSTRUCTOR, PROCTOR, ADMIN]
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          example: 86400
+        user:
+          $ref: '#/components/schemas/UserSummary'
+
+    UserSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        full_name:
+          type: string
+        role:
+          type: string
+          enum: [STUDENT, INSTRUCTOR, PROCTOR, ADMIN]
+
+    # ── SESSIONS ────────────────────────────────────────────────────────────
+    CreateSessionRequest:
+      type: object
+      required: [course_id, scheduled_at, duration_minutes]
+      properties:
+        course_id:
+          type: string
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+          minimum: 10
+          maximum: 120
+          example: 30
+        room_label:
+          type: string
+          example: Lab A-204
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+          example: sess-001
+        course_id:
+          type: string
+        status:
+          type: string
+          enum: [SCHEDULED, OPEN, CLOSED]
+        scheduled_at:
+          type: string
+          format: date-time
+        duration_minutes:
+          type: integer
+        room_label:
+          type: string
+        opened_at:
+          type: string
+          format: date-time
+          nullable: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+        network_isolation_confirmed:
+          type: boolean
+        baseline_count:
+          type: integer
+          description: Number of students who submitted baseline in this session
+
+    SessionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    BaselineSubmitRequest:
+      type: object
+      required: [language, code]
+      properties:
+        language:
+          type: string
+          enum: [python, javascript, typescript]
+        code:
+          type: string
+          maxLength: 2097152
+          description: Raw source code, max 2MB
+
+    BaselineRecord:
+      type: object
+      properties:
+        id:
+          type: string
+        student_id:
+          type: string
+        session_id:
+          type: string
+        content_hash:
+          type: string
+          description: SHA-256 of code at capture time
+          example: sha256:3b4c9d...
+        locked_at:
+          type: string
+          format: date-time
+        sophistication_summary:
+          $ref: '#/components/schemas/SophisticationFeatures'
+
+    AttendanceListResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+        total_enrolled:
+          type: integer
+        submitted_count:
+          type: integer
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              student_id:
+                type: string
+              full_name:
+                type: string
+              submitted_at:
+                type: string
+                format: date-time
+                nullable: true
+              status:
+                type: string
+                enum: [SUBMITTED, MISSING]
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ── SUBMISSIONS ─────────────────────────────────────────────────────────
+    AnalyzeRequest:
+      type: object
+      required: [course_id, week_number, language, code]
+      properties:
+        course_id:
+          type: string
+        week_number:
+          type: integer
+          minimum: 1
+          maximum: 20
+        language:
+          type: string
+          enum: [python, javascript, typescript]
+        code:
+          type: string
+          maxLength: 10485760
+          description: Raw source code, max 10MB
+
+    SophisticationFeatures:
+      type: object
+      description: AST-extracted complexity metrics
+      properties:
+        total_score:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+        error_handling_tier:
+          type: integer
+          enum: [0, 1, 3, 5]
+          description: "0=none, 1=basic try/catch, 3=specific exceptions, 5=custom hierarchies"
+        architecture_tier:
+          type: integer
+          enum: [0, 2, 4, 5]
+          description: "0=flat functions, 2=simple classes, 4=service layer, 5=repository/CQRS"
+        type_safety_score:
+          type: integer
+          enum: [0, 1, 3]
+          description: "0=none, 1=partial hints, 3=comprehensive Pydantic/TypeScript"
+        has_decorators:
+          type: boolean
+        has_async:
+          type: boolean
+        has_context_managers:
+          type: boolean
+        has_metaclasses:
+          type: boolean
+        naming_verbosity_score:
+          type: number
+          format: float
+          description: Average identifier length normalized 0-1
+        cyclomatic_complexity_avg:
+          type: number
+          format: float
+        max_nesting_depth:
+          type: integer
+        has_dependency_injection:
+          type: boolean
+        has_abstract_classes:
+          type: boolean
+        has_dataclasses:
+          type: boolean
+        comment_density:
+          type: number
+          format: float
+          description: Comments per line of code
+
+    GenealogyViolation:
+      type: object
+      properties:
+        technique:
+          type: string
+          example: circuit_breaker
+        missing_prerequisite:
+          type: string
+          example: context_managers
+        severity:
+          type: number
+          format: float
+          example: 0.5
+
+    AnalysisResult:
+      type: object
+      properties:
+        submission_id:
+          type: string
+        flag_level:
+          type: string
+          enum: [NORMAL, MONITOR, REVIEW, INTERVIEW]
+        ensemble_score:
+          type: number
+          format: float
+        score_breakdown:
+          type: object
+          properties:
+            trajectory_z:
+              type: number
+              format: float
+            genealogy_penalty:
+              type: number
+              format: float
+            cohort_outlier:
+              type: number
+              format: float
+            weights:
+              type: object
+              properties:
+                trajectory:
+                  type: number
+                  format: float
+                genealogy:
+                  type: number
+                  format: float
+                cohort:
+                  type: number
+                  format: float
+        sophistication:
+          $ref: '#/components/schemas/SophisticationFeatures'
+        genealogy_violations:
+          type: array
+          items:
+            $ref: '#/components/schemas/GenealogyViolation'
+        cohort_position:
+          type: object
+          properties:
+            week_number:
+              type: integer
+            percentile:
+              type: number
+              format: float
+            cohort_mean:
+              type: number
+              format: float
+            cohort_std:
+              type: number
+              format: float
+        weeks_compressed:
+          type: number
+          format: float
+          description: Equivalent weeks of learning detected in this single submission
+        baseline_score:
+          type: number
+          format: float
+        expected_score_week4:
+          type: number
+          format: float
+
+    SubmissionReport:
+      allOf:
+        - $ref: '#/components/schemas/AnalysisResult'
+        - type: object
+          properties:
+            submitted_at:
+              type: string
+              format: date-time
+            course_id:
+              type: string
+            week_number:
+              type: integer
+            language:
+              type: string
+
+    SubmissionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmissionReport'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ── COHORTS ─────────────────────────────────────────────────────────────
+    CohortStatsResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            cohort_id:
+              type: string
+            week_number:
+              type: integer
+            submission_count:
+              type: integer
+            mean_score:
+              type: number
+              format: float
+            std_dev:
+              type: number
+              format: float
+            p10:
+              type: number
+              format: float
+            p50:
+              type: number
+              format: float
+            p90:
+              type: number
+              format: float
+            p90_threshold:
+              type: number
+              format: float
+            flag_distribution:
+              type: object
+              properties:
+                NORMAL:
+                  type: integer
+                MONITOR:
+                  type: integer
+                REVIEW:
+                  type: integer
+                INTERVIEW:
+                  type: integer
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ── INSTRUCTOR QUEUE ────────────────────────────────────────────────────
+    QueueItem:
+      type: object
+      properties:
+        id:
+          type: string
+        submission_id:
+          type: string
+        student:
+          $ref: '#/components/schemas/UserSummary'
+        priority_score:
+          type: number
+          format: float
+        status:
+          type: string
+          enum: [PENDING, REVIEWED, CLEARED, CONFIRMED]
+        llm_guidance:
+          type: string
+          nullable: true
+          description: Gemini-generated interview guidance. Null if score < 2.5 or API call failed.
+        instructor_note:
+          type: string
+          nullable: true
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    QueueListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueueItem'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    ResolveQueueRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [CLEARED, CONFIRMED]
+          description: CLEARED = false positive. CONFIRMED = academic integrity violation.
+        instructor_note:
+          type: string
+          maxLength: 2000
+
+    # ── STUDENTS ────────────────────────────────────────────────────────────
+    TrajectoryResponse:
+      type: object
+      properties:
+        student_id:
+          type: string
+        course_id:
+          type: string
+        baseline_score:
+          type: number
+          format: float
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              week_number:
+                type: integer
+              score:
+                type: number
+                format: float
+              expected_score:
+                type: number
+                format: float
+              flag_level:
+                type: string
+                enum: [NORMAL, MONITOR, REVIEW, INTERVIEW]
+              ensemble_score:
+                type: number
+                format: float
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ── ADMIN ───────────────────────────────────────────────────────────────
+    PrerequisiteRule:
+      type: object
+      required: [technique, requires, severity_weight]
+      properties:
+        technique:
+          type: string
+          example: circuit_breaker
+        requires:
+          type: array
+          items:
+            type: string
+          example: [decorators, context_managers]
+        severity_weight:
+          type: number
+          format: float
+          minimum: 0.1
+          maximum: 2.0
+          example: 0.5
+
+    PrerequisiteListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrerequisiteRule'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    # ── SHARED ──────────────────────────────────────────────────────────────
+    PaginationMeta:
+      type: object
+      description: Cursor-based pagination metadata
+      properties:
+        next_cursor:
+          type: string
+          nullable: true
+          description: Pass as `cursor` parameter in next request. Null if no more pages.
+          example: eyJpZCI6InN1Yi0wNDIifQ
+        has_more:
+          type: boolean
+          example: true
+
+    ErrorResponse:
+      type: object
+      required: [error, message, status]
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+          example: BASELINE_NOT_FOUND
+        message:
+          type: string
+          description: Human-readable description
+          example: No locked baseline found for student in course crs-101
+        status:
+          type: integer
+          example: 404
+        details:
+          type: array
+          description: Field-level validation errors (422 only)
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: week_number
+              message:
+                type: string
+                example: Must be between 1 and 20
+
+  responses:
+    BadRequest:
+      description: Invalid request format or parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: BAD_REQUEST
+            message: Invalid request body
+            status: 400
+
+    Unauthorized:
+      description: Missing or invalid JWT token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: UNAUTHORIZED
+            message: JWT token is missing or expired
+            status: 401
+
+    Forbidden:
+      description: Authenticated but insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: FORBIDDEN
+            message: Instructor role required to access this resource
+            status: 403
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: NOT_FOUND
+            message: Requested resource does not exist
+            status: 404
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: CONFLICT
+            message: Resource already exists or state conflict
+            status: 409
+
+    UnprocessableEntity:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: VALIDATION_ERROR
+            message: Request validation failed
+            status: 422
+            details:
+              - field: week_number
+                message: Must be between 1 and 20
+              - field: language
+                message: Must be one of python, javascript, typescript
+
+    InternalError:
+      description: Unexpected server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: INTERNAL_SERVER_ERROR
+            message: An unexpected error occurred
+            status: 500
