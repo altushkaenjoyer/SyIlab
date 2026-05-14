@@ -1,25 +1,4 @@
 services:
-  app:
-    build: .
-    ports:
-      - "3000:3000"
-    environment:
-      DATABASE_URL: postgresql://syllab:syllab_pass@postgres:5432/syllab_db
-      REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_min_32_chars_access_!!}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_min_32_chars_refresh_!}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change_me_exactly_32_chars_here!}
-      NODE_ENV: ${NODE_ENV:-production}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      PORT: 3000
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-
   postgres:
     image: postgres:15-alpine
     environment:
@@ -51,24 +30,84 @@ services:
       retries: 5
     restart: unless-stopped
 
-  # Runs migrations + seed on startup
   migrate:
     build: .
     command: >
-      sh -c "npx prisma migrate deploy &&
+      sh -c "npx prisma db push --accept-data-loss &&
              npx prisma db seed &&
              psql $$DATABASE_URL -f prisma/migrations/baseline_lock_trigger.sql || true"
     environment:
       DATABASE_URL: postgresql://syllab:syllab_pass@postgres:5432/syllab_db
       REDIS_URL: redis://redis:6379
-      JWT_ACCESS_SECRET: change_me_min_32_chars_access_!!
-      JWT_REFRESH_SECRET: change_me_min_32_chars_refresh_!
-      ENCRYPTION_KEY: change_me_exactly_32_chars_here!
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_min_32_chars_access_!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_min_32_chars_refresh_!}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change_me_exactly_32_chars_here!}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@syllab.local}
       NODE_ENV: production
     depends_on:
       postgres:
         condition: service_healthy
     restart: "no"
+
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://syllab:syllab_pass@postgres:5432/syllab_db
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_min_32_chars_access_!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_min_32_chars_refresh_!}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change_me_exactly_32_chars_here!}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@syllab.local}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      NODE_ENV: ${NODE_ENV:-production}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      PORT: 3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: node workers/email.worker.js
+    environment:
+      DATABASE_URL: postgresql://syllab:syllab_pass@postgres:5432/syllab_db
+      REDIS_URL: redis://redis:6379
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_min_32_chars_access_!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_min_32_chars_refresh_!}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change_me_exactly_32_chars_here!}
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@syllab.local}
+      NODE_ENV: ${NODE_ENV:-production}
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
 
 volumes:
   postgres_data:

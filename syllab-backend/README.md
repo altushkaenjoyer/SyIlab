@@ -6,14 +6,14 @@
 
 ---
 
-## Quick Start
+## Quick Start (Docker)
 
 ```bash
 # 1. Clone and configure
 cp .env.example .env
-# Edit .env — set real secrets for JWT and ENCRYPTION_KEY
+# Edit .env — fill in JWT secrets, ENCRYPTION_KEY, and SMTP credentials
 
-# 2. Run everything
+# 2. Run everything (Postgres + Redis + App)
 docker compose up
 
 # App:    http://localhost:3000
@@ -21,6 +21,40 @@ docker compose up
 # Health: http://localhost:3000/health
 ```
 
+---
+
+## Manual Setup (without Docker)
+
+### Prerequisites
+- Node.js 20+
+- PostgreSQL 15
+- Redis 7
+
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment
+cp .env.example .env
+# Fill in: DATABASE_URL, REDIS_URL, JWT secrets, ENCRYPTION_KEY, SMTP_*
+
+# 3. Run database migrations
+npm run db:migrate:dev
+
+# 4. Generate Prisma client
+npm run db:generate
+
+# 5. (Optional) Seed with test data
+npm run db:seed
+
+# 6. Start the API server (terminal 1)
+npm run dev
+
+# 7. Start the email worker (terminal 2)
+npm run worker:dev
+```
+
+---
 
 ## Stack
 
@@ -29,11 +63,13 @@ docker compose up
 | Framework | Express.js (Node.js 20) |
 | ORM | Prisma 5 |
 | Database | PostgreSQL 15 |
-| Cache / Rate limiting | Redis 7 |
+| Cache / Queue / Rate limiting | Redis 7 + BullMQ |
 | Auth | JWT (access 24h + refresh 30d) + bcrypt (cost 12) |
+| Email | Nodemailer (async via BullMQ worker) |
 | Validation | Zod |
 | API Docs | Swagger UI at `/docs` |
 
+---
 
 ## Environment Variables
 
@@ -45,39 +81,84 @@ docker compose up
 | `JWT_REFRESH_SECRET` | ✓ | Min 32 chars |
 | `ENCRYPTION_KEY` | ✓ | Exactly 32 chars (AES-256) |
 | `ALLOWED_ORIGINS` | ✓ | Comma-separated CORS origins |
+| `APP_URL` | ✓ | Base URL for email links (e.g. http://localhost:3000) |
+| `SMTP_HOST` | ✓ | SMTP server (e.g. smtp.gmail.com) |
+| `SMTP_PORT` | ✓ | Usually 587 |
+| `SMTP_USER` | ✓ | SMTP login (Gmail address) |
+| `SMTP_PASS` | ✓ | SMTP password (Gmail App Password) |
+| `FROM_EMAIL` | ✓ | Sender address shown in emails |
 | `GEMINI_API_KEY` | optional | For LLM explanation generation |
 | `PORT` | optional | Default 3000 |
 
-App **refuses to start** if any required variable is missing.
+App **refuses to start** if any required variable is missing or malformed.
+
+---
 
 ## Auth Flow
 
-POST /auth/register   → create account
-POST /auth/login      → access_token (24h) + refresh_token (30d)
-GET  /auth/me         → current user (requires Bearer token)
-POST /auth/refresh    → new access_token (refresh_token reusable but revocable)
-POST /auth/logout     → invalidate refresh_token
+```
+POST /auth/register            → create account (sends verification email)
+POST /auth/verify-email        → activate account with token from email
+POST /auth/resend-verification → resend verification email
+POST /auth/login               → access_token (24h) + refresh_token (30d)
+GET  /auth/me                  → current user info (requires Bearer token)
+POST /auth/refresh             → new access_token
+POST /auth/logout              → revoke refresh token
+POST /auth/forgot-password     → send password reset link to email
+POST /auth/reset-password      → set new password using token from email
 ```
 
 **Roles:** `STUDENT` / `INSTRUCTOR` / `PROCTOR` / `ADMIN`
 
-Wrong role → `403 Forbidden` (not 401).
+- Unverified users → `403 EMAIL_NOT_VERIFIED` on all protected routes
+- Wrong role → `403 FORBIDDEN`
+- Rate limiting: 5 req/min per IP on register, login, resend, forgot-password
 
-Rate limiting: 5 requests/minute per IP on `/auth/register` and `/auth/login`.
-
+---
 
 ## Core Business Flow
-# Week 1 — Proctored baseline (INSTRUCTOR opens session)
-PATCH /sessions/:id/open
-POST  /sessions/:id/baseline     ← STUDENT submits code in proctored environment
 
-# Weeks 2-15 — Analysis on every submission
-POST  /submissions/analyze       ← returns ensemble score + flag level
-
-# Instructor review
-GET   /instructor/queue          ← prioritized list of flagged submissions
-PATCH /instructor/queue/:id/resolve
 ```
+# Week 1 — Proctored baseline
+POST  /sessions                      ← INSTRUCTOR creates session
+PATCH /sessions/:id/open             ← INSTRUCTOR/PROCTOR opens session
+POST  /sessions/:id/baseline         ← STUDENT submits baseline code
+PATCH /sessions/:id/close            ← INSTRUCTOR closes session
+
+# Weeks 2–15 — Submission analysis
+POST  /submissions/analyze           ← STUDENT submits code, gets ensemble score + flag
+
+# Instructor review queue
+GET   /instructor/queue              ← prioritized flagged submissions
+GET   /instructor/queue/:id          ← full details + breakdown
+PATCH /instructor/queue/:id/resolve  ← mark REVIEWED / CLEARED / CONFIRMED
+```
+
+---
+
+## Email Notifications (3 business events)
+
+| Event | Trigger | Recipient |
+|-------|---------|-----------|
+| Email verification | Registration | Student |
+| Password reset | Forgot-password request | Student |
+| Submission flagged | Score ≥ REVIEW threshold | Instructor |
+
+All emails are sent **asynchronously** via BullMQ — API endpoints return immediately.
+
+---
+
+## Background Worker
+
+```bash
+npm run worker        # production
+npm run worker:dev    # development (auto-restart)
+```
+
+The worker processes the `emails` Redis queue with:
+- 3 retry attempts with exponential backoff (5s, 10s, 20s)
+- Concurrency: 5 parallel email jobs
+- Keeps last 100 completed / 200 failed jobs visible in Redis
 
 ---
 
@@ -112,6 +193,9 @@ npm run test:integration
 
 # All tests
 npm test
+
+# Integration tests with custom DB
+DATABASE_URL="postgresql://syllab:syllab_pass@localhost:5433/syllab_test" npm run test:integration
 ```
 
 ---
@@ -120,14 +204,17 @@ npm test
 
 ```
 src/
-├── config/         env.js, database.js, redis.js
+├── config/         env.js, database.js, redis.js, queue.js
 ├── controllers/    auth, sessions, submissions, queue
-├── middleware/     auth, rbac, rateLimit, validate, errorHandler
+├── middleware/     auth (authenticate + requireVerified), rbac, rateLimit, validate, errorHandler
 ├── routes/         auth, sessions, submissions, queue
-├── services/       auth, scoring, astExtractor, genealogy, encryption
+├── services/       auth, email, scoring, astExtractor, genealogy, encryption
 ├── utils/          pagination
 ├── validators/     schemas.js (Zod)
 └── app.js / server.js
+
+workers/
+└── email.worker.js   (BullMQ — processes "emails" queue)
 
 prisma/
 ├── schema.prisma
@@ -147,6 +234,8 @@ tests/
 
 **Why Prisma?** Type-safe ORM with migration history. Zero raw SQL queries.
 
+**Email is async.** API endpoints enqueue email jobs via BullMQ and return immediately. The worker runs as a separate process, retries on failure, and never blocks the request lifecycle.
+
 **Baseline immutability** enforced at two layers:
 1. Prisma middleware (application layer)
 2. PostgreSQL trigger `baseline_lock_guard` (database layer)
@@ -155,8 +244,4 @@ tests/
 
 **Rate limiting** uses Redis token bucket via `rate-limiter-flexible` (not in-memory) so it works across multiple app instances.
 
-tests:
-npm run test:unit
-
-DATABASE_URL="postgresql://syllab:syllab_pass@localhost:5433/syllab_test" npx jest tests/integration --runInBand --forceExit
-
+**Password reset** invalidates all refresh tokens on success — forces re-login on all devices after a password change.

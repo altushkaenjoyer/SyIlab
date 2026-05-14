@@ -1,17 +1,22 @@
 {
   "info": {
-    "name": "SylLab-Forensics API",
-    "description": "Anti-Plagiarism Code Authorship Verification Platform — полный набор эндпоинтов для демонстрации",
+    "name": "SylLab-Forensics API v2",
+    "description": "Полный набор эндпоинтов. Токены сохраняются автоматически после логина.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "base_url",         "value": "http://localhost:3000", "current_value": "http://localhost:3000", "type": "string" },
-    { "key": "student_token",    "value": "", "current_value": "", "type": "string" },
-    { "key": "instructor_token", "value": "", "current_value": "", "type": "string" },
-    { "key": "refresh_token",    "value": "", "current_value": "", "type": "string" },
-    { "key": "session_id",       "value": "", "current_value": "", "type": "string" },
-    { "key": "submission_id",    "value": "", "current_value": "", "type": "string" },
-    { "key": "course_id",        "value": "demo-course-cs101", "current_value": "demo-course-cs101", "type": "string" }
+    { "key": "base_url", "value": "http://localhost:3000", "type": "string" },
+    { "key": "student_token", "value": "", "type": "string" },
+    { "key": "instructor_token", "value": "", "type": "string" },
+    { "key": "refresh_token", "value": "", "type": "string" },
+    { "key": "verification_token", "value": "ВСТАВЬ_ТОКЕН_ИЗ_ПИСЬМА", "type": "string" },
+    { "key": "reset_token", "value": "ВСТАВЬ_ТОКЕН_ИЗ_ПИСЬМА", "type": "string" },
+    { "key": "session_id", "value": "", "type": "string" },
+    { "key": "submission_id", "value": "", "type": "string" },
+    { "key": "queue_item_id", "value": "", "type": "string" },
+    { "key": "course_id", "value": "demo-course-cs101", "type": "string" },
+    { "key": "student_email", "value": "student@test.com", "type": "string" },
+    { "key": "instructor_email", "value": "instructor@test.com", "type": "string" }
   ],
   "item": [
     {
@@ -22,703 +27,751 @@
           "request": {
             "method": "GET",
             "url": "{{base_url}}/health"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
-                ]
-              }
-            }
-          ]
+          }
         }
       ]
     },
     {
-      "name": "01 · Auth",
+      "name": "01 · Auth — Регистрация",
       "item": [
         {
-          "name": "POST /auth/register — student",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/auth/register",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"student@demo.com\",\n  \"password\": \"Password123\",\n  \"full_name\": \"Ivan Petrov\",\n  \"role\": \"STUDENT\"\n}"
-            }
-          },
+          "name": "Регистрация студента",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "pm.test('Пароль не возвращается', () => pm.expect(pm.response.json().data).to.not.have.property('passwordHash'));",
-                  "pm.test('Роль STUDENT', () => pm.expect(pm.response.json().data.role).to.eql('STUDENT'));"
+                  "if (pm.response.code === 201) {",
+                  "  console.log('=== СЛЕДУЮЩИЙ ШАГ ===');",
+                  "  console.log('1. Открой почту ' + JSON.parse(pm.request.body.raw).email);",
+                  "  console.log('2. Найди письмо от SylLab-Forensics');",
+                  "  console.log('3. Скопируй токен из ссылки: ...?token=ВОТ_ЭТО');",
+                  "  console.log('4. Вставь в переменную коллекции: verification_token');",
+                  "  console.log('5. Запусти запрос «Верификация email»');",
+                  "}"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "POST /auth/register — instructor",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/register",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"prof@demo.com\",\n  \"password\": \"Password123\",\n  \"full_name\": \"Prof Ivanov\",\n  \"role\": \"INSTRUCTOR\"\n}"
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"Test1234\",\n  \"full_name\": \"Ivan Petrov\",\n  \"role\": \"STUDENT\"\n}"
             }
-          },
+          }
+        },
+        {
+          "name": "Регистрация инструктора",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "pm.test('Роль INSTRUCTOR', () => pm.expect(pm.response.json().data.role).to.eql('INSTRUCTOR'));"
+                  "if (pm.response.code === 201) {",
+                  "  console.log('Инструктор зарегистрирован. Верифицируй email так же как студент.');",
+                  "}"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "POST /auth/register — 409 дубликат email",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/register",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"student@demo.com\",\n  \"password\": \"Password123\",\n  \"full_name\": \"Дубликат\"\n}"
+              "raw": "{\n  \"email\": \"{{instructor_email}}\",\n  \"password\": \"Test1234\",\n  \"full_name\": \"Prof Smirnov\",\n  \"role\": \"INSTRUCTOR\"\n}"
             }
-          },
+          }
+        },
+        {
+          "name": "❌ 409 — дублирует email",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"Test1234\",\n  \"full_name\": \"Ivan Petrov\"\n}"
+            }
+          }
+        },
+        {
+          "name": "❌ 422 — слабый пароль",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"weak@test.com\",\n  \"password\": \"123\",\n  \"full_name\": \"Weak Pass\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 · Auth — Email верификация",
+      "item": [
+        {
+          "name": "🔧 DEV: Получить токен из БД (без email)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('409 EMAIL_TAKEN', () => pm.response.to.have.status(409));",
-                  "pm.test('Код ошибки EMAIL_TAKEN', () => pm.expect(pm.response.json().error).to.eql('EMAIL_TAKEN'));"
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  if (d.verification_token) {",
+                  "    pm.collectionVariables.set('verification_token', d.verification_token);",
+                  "    console.log('✅ verification_token сохранён автоматически!');",
+                  "    console.log('Сразу запускай «Верификация email» — токен уже вставлен');",
+                  "  } else {",
+                  "    console.log('Email уже верифицирован или токен не найден');",
+                  "    console.log('email_verified: ' + d.email_verified);",
+                  "  }",
+                  "}"
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/auth/dev/token?email={{student_email}}",
+              "query": [{ "key": "email", "value": "{{student_email}}" }]
+            }
+          }
         },
         {
-          "name": "POST /auth/register — 422 слабый пароль",
+          "name": "✅ Верификация email",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const token = pm.collectionVariables.get('verification_token');",
+                  "if (!token || token === 'ВСТАВЬ_ТОКЕН_ИЗ_ПИСЬМА') {",
+                  "  console.warn('⚠️  Вставь токен из письма в переменную verification_token!');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('verification_token', '');",
+                  "  console.log('✅ Email верифицирован! Теперь запускай «Логин»');",
+                  "} else {",
+                  "  console.log('❌ Ошибка: ' + pm.response.json().message);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/register",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/verify-email",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"weak@demo.com\",\n  \"password\": \"123\",\n  \"full_name\": \"Test\"\n}"
+              "raw": "{\n  \"token\": \"{{verification_token}}\"\n}"
             }
-          },
+          }
+        },
+        {
+          "name": "🔧 DEV: Получить токен инструктора из БД",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('422 VALIDATION_ERROR', () => pm.response.to.have.status(422));",
-                  "pm.test('Ошибка валидации', () => pm.expect(pm.response.json().error).to.eql('VALIDATION_ERROR'));"
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json();",
+                  "  if (d.verification_token) {",
+                  "    pm.collectionVariables.set('verification_token', d.verification_token);",
+                  "    console.log('✅ verification_token сохранён! Запускай «Верификация email»');",
+                  "  } else {",
+                  "    console.log('Email уже верифицирован: ' + d.email_verified);",
+                  "  }",
+                  "}"
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/auth/dev/token?email={{instructor_email}}",
+              "query": [{ "key": "email", "value": "{{instructor_email}}" }]
+            }
+          }
         },
         {
-          "name": "POST /auth/login — student ✦ сохраняет токен",
+          "name": "Повторная отправка письма",
           "request": {
             "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/resend-verification",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "❌ 403 — логин без верификации",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "url": "{{base_url}}/auth/login",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"student@demo.com\",\n  \"password\": \"Password123\"\n}"
+              "raw": "{\n  \"email\": \"notverified_user@test.com\",\n  \"password\": \"Test1234\"\n}"
             }
-          },
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 · Auth — Логин и токены",
+      "item": [
+        {
+          "name": "Логин студента ✦ сохраняет токен",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const d = pm.response.json().data;",
-                  "pm.test('access_token есть', () => pm.expect(d).to.have.property('access_token'));",
-                  "pm.test('refresh_token есть', () => pm.expect(d).to.have.property('refresh_token'));",
-                  "pm.collectionVariables.set('student_token', d.access_token);",
-                  "pm.collectionVariables.set('refresh_token', d.refresh_token);",
-                  "pm.test('Токен сохранён', () => pm.expect(pm.collectionVariables.get('student_token')).to.not.be.empty);"
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.collectionVariables.set('student_token', data.access_token);",
+                  "  pm.collectionVariables.set('refresh_token', data.refresh_token);",
+                  "  console.log('✅ student_token сохранён автоматически');",
+                  "} else {",
+                  "  console.log('❌ ' + pm.response.json().message);",
+                  "}"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "POST /auth/login — instructor ✦ сохраняет токен",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/login",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/login",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"prof@demo.com\",\n  \"password\": \"Password123\"\n}"
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"Test1234\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const d = pm.response.json().data;",
-                  "pm.collectionVariables.set('instructor_token', d.access_token);",
-                  "pm.test('Инструктор токен сохранён', () => pm.expect(pm.collectionVariables.get('instructor_token')).to.not.be.empty);"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "POST /auth/login — 401 неверный пароль",
-          "request": {
-            "method": "POST",
-            "url": "{{base_url}}/auth/login",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"student@demo.com\",\n  \"password\": \"WrongPass999\"\n}"
-            }
-          },
+          "name": "Логин инструктора ✦ сохраняет токен",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('401 INVALID_CREDENTIALS', () => pm.response.to.have.status(401));",
-                  "pm.test('Код ошибки', () => pm.expect(pm.response.json().error).to.eql('INVALID_CREDENTIALS'));"
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.collectionVariables.set('instructor_token', data.access_token);",
+                  "  pm.collectionVariables.set('refresh_token', data.refresh_token);",
+                  "  console.log('✅ instructor_token сохранён автоматически');",
+                  "}"
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{instructor_email}}\",\n  \"password\": \"Test1234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "❌ 401 — неверный пароль",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{student_email}}\",\n  \"password\": \"wrongpassword\"\n}"
+            }
+          }
         },
         {
           "name": "GET /auth/me — текущий пользователь",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/auth/me",
-            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Роль STUDENT', () => pm.expect(pm.response.json().data.role).to.eql('STUDENT'));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
+            "url": "{{base_url}}/auth/me"
+          }
         },
         {
-          "name": "GET /auth/me — 401 без токена",
+          "name": "❌ 401 — /auth/me без токена",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/auth/me"
-          },
+          }
+        },
+        {
+          "name": "Обновить access_token (refresh) ✦ сохраняет токен",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('401 UNAUTHORIZED', () => pm.response.to.have.status(401));"
+                  "if (pm.response.code === 200) {",
+                  "  pm.collectionVariables.set('student_token', pm.response.json().data.access_token);",
+                  "  console.log('✅ access_token обновлён');",
+                  "}"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "POST /auth/refresh — обновить access_token",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/refresh",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/refresh",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Новый access_token', () => pm.expect(pm.response.json().data).to.have.property('access_token'));"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "POST /auth/logout",
+          "name": "Logout",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/auth/logout",
             "header": [
               { "key": "Authorization", "value": "Bearer {{student_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/auth/logout",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
-                ]
-              }
-            }
-          ]
+          }
         }
       ]
     },
     {
-      "name": "02 · RBAC (защита ролей)",
+      "name": "04 · Auth — Сброс пароля",
       "item": [
         {
-          "name": "POST /sessions — 403 студент не может создать сессию",
+          "name": "1. Забыл пароль (отправляет письмо)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  console.log('=== СЛЕДУЮЩИЙ ШАГ ===');",
+                  "  console.log('1. Открой почту');",
+                  "  console.log('2. Найди письмо «Reset your SylLab-Forensics password»');",
+                  "  console.log('3. Скопируй токен из ссылки: ...?token=ВОТ_ЭТО');",
+                  "  console.log('4. Вставь в переменную коллекции: reset_token');",
+                  "  console.log('5. Запусти запрос «Сброс пароля»');",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/sessions",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{student_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
-            ],
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/forgot-password",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"scheduled_at\": \"2026-06-01T10:00:00Z\",\n  \"duration_minutes\": 90\n}"
+              "raw": "{\n  \"email\": \"{{student_email}}\"\n}"
             }
-          },
+          }
+        },
+        {
+          "name": "2. Сброс пароля (вставь токен из письма)",
           "event": [
             {
-              "listen": "test",
+              "listen": "prerequest",
               "script": {
                 "exec": [
-                  "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));",
-                  "pm.test('Код FORBIDDEN', () => pm.expect(pm.response.json().error).to.eql('FORBIDDEN'));"
+                  "const token = pm.collectionVariables.get('reset_token');",
+                  "if (!token || token === 'ВСТАВЬ_ТОКЕН_ИЗ_ПИСЬМА') {",
+                  "  console.warn('⚠️  Вставь токен из письма в переменную reset_token!');",
+                  "}"
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{reset_token}}\",\n  \"new_password\": \"NewPass1234\"\n}"
+            }
+          }
         },
         {
-          "name": "GET /instructor/queue — 403 студент не видит очередь",
+          "name": "❌ 400 — невалидный токен",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/auth/reset-password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"fake_invalid_token\",\n  \"new_password\": \"NewPass1234\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 · RBAC (защита ролей)",
+      "item": [
+        {
+          "name": "❌ 403 — студент создаёт сессию",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{student_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/sessions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"scheduled_at\": \"2025-12-01T10:00:00Z\",\n  \"duration_minutes\": 90\n}"
+            }
+          }
+        },
+        {
+          "name": "❌ 403 — студент видит очередь",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/instructor/queue",
-            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('403 FORBIDDEN', () => pm.response.to.have.status(403));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
+            "url": "{{base_url}}/instructor/queue"
+          }
         },
         {
-          "name": "GET /instructor/queue — 401 без токена",
+          "name": "❌ 401 — без токена",
           "request": {
             "method": "GET",
             "url": "{{base_url}}/instructor/queue"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('401 UNAUTHORIZED', () => pm.response.to.have.status(401));"
-                ]
-              }
-            }
-          ]
+          }
         }
       ]
     },
     {
-      "name": "03 · Sessions (прокторинг)",
+      "name": "06 · Sessions (прокторинг)",
       "item": [
         {
-          "name": "POST /sessions — создать сессию ✦ сохраняет session_id",
+          "name": "Создать сессию ✦ сохраняет session_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const id = pm.response.json().data.id;",
+                  "  pm.collectionVariables.set('session_id', id);",
+                  "  console.log('✅ session_id сохранён: ' + id);",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/sessions",
             "header": [
               { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/sessions",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"scheduled_at\": \"2026-06-01T10:00:00Z\",\n  \"duration_minutes\": 90,\n  \"room_label\": \"Ауд. 301\"\n}"
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"scheduled_at\": \"2025-12-01T10:00:00Z\",\n  \"duration_minutes\": 90,\n  \"room_label\": \"Room 101\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "const d = pm.response.json().data;",
-                  "pm.test('Статус SCHEDULED', () => pm.expect(d.status).to.eql('SCHEDULED'));",
-                  "pm.collectionVariables.set('session_id', d.id);",
-                  "pm.test('session_id сохранён', () => pm.expect(d.id).to.not.be.empty);"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "GET /sessions — список сессий",
+          "name": "Список сессий",
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/sessions?course_id={{course_id}}",
-              "query": [{ "key": "course_id", "value": "{{course_id}}" }]
-            },
-            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Есть массив data', () => pm.expect(pm.response.json().data).to.be.an('array'));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/sessions"
+          }
         },
         {
-          "name": "PATCH /sessions/:id/open — открыть сессию",
+          "name": "Открыть сессию (OPEN)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/sessions/{{session_id}}/open",
             "header": [
               { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/sessions/{{session_id}}/open",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"network_isolation_confirmed\": true\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Статус OPEN', () => pm.expect(pm.response.json().data.status).to.eql('OPEN'));"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "POST /sessions/:id/baseline — отправить базовый код",
+          "name": "Отправить базовый код (студент)",
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/sessions/{{session_id}}/baseline",
             "header": [
               { "key": "Authorization", "value": "Bearer {{student_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/sessions/{{session_id}}/baseline",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"language\": \"python\",\n  \"code\": \"def add(a, b):\\n    return a + b\\n\\ndef greet(name):\\n    message = 'Hello ' + name\\n    print(message)\\n\\nresult = add(10, 5)\\ngreet('Ivan')\\nprint(result)\\n\"\n}"
+              "raw": "{\n  \"language\": \"python\",\n  \"code\": \"def add(a, b):\\n    return a + b\\n\\ndef multiply(a, b):\\n    return a * b\\n\\nresult = add(2, 3)\\nprint(result)\\n\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
-                  "const d = pm.response.json().data;",
-                  "pm.test('Есть content_hash', () => pm.expect(d.content_hash).to.match(/^sha256:/));",
-                  "pm.test('Сразу залочен', () => pm.expect(d.locked_at).to.not.be.null);",
-                  "pm.test('sophistication_summary есть', () => pm.expect(d).to.have.property('sophistication_summary'));"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "GET /sessions/:id/attendance — явка студентов",
+          "name": "Список студентов на сессии",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/sessions/{{session_id}}/attendance",
-            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const d = pm.response.json().data;",
-                  "pm.test('Есть completion_rate', () => pm.expect(d).to.have.property('completion_rate'));",
-                  "pm.test('Есть submitted_count', () => pm.expect(d.submitted_count).to.be.at.least(0));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/sessions/{{session_id}}/attendance"
+          }
         },
         {
-          "name": "PATCH /sessions/:id/close — закрыть сессию",
+          "name": "Закрыть сессию (CLOSED)",
           "request": {
             "method": "PATCH",
-            "url": "{{base_url}}/sessions/{{session_id}}/close",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
-            ],
-            "body": { "mode": "raw", "raw": "{}" }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Статус CLOSED', () => pm.expect(pm.response.json().data.status).to.eql('CLOSED'));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/sessions/{{session_id}}/close"
+          }
         }
       ]
     },
     {
-      "name": "04 · Submissions (анализ кода)",
+      "name": "07 · Submissions (анализ кода)",
       "item": [
         {
-          "name": "POST /submissions/analyze — 422 неподдерживаемый язык",
+          "name": "Анализ — NORMAL (похожий код)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.collectionVariables.set('submission_id', d.submission_id || '');",
+                  "  console.log('Flag: ' + d.flag_level + ' | Score: ' + (d.ensemble_score * 100).toFixed(1) + '%');",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/submissions/analyze",
             "header": [
               { "key": "Authorization", "value": "Bearer {{student_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/submissions/analyze",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"week_number\": 4,\n  \"language\": \"ruby\",\n  \"code\": \"puts 'hello world'\"\n}"
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"week_number\": 2,\n  \"language\": \"python\",\n  \"code\": \"def add(a, b):\\n    return a + b\\n\\ndef multiply(a, b):\\n    return a * b\\n\\nresult = add(2, 3)\\nprint(result)\\n\"\n}"
             }
-          },
+          }
+        },
+        {
+          "name": "Анализ — 🚨 INTERVIEW (enterprise-код от новичка)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('422 VALIDATION_ERROR', () => pm.response.to.have.status(422));"
+                  "if (pm.response.code === 200) {",
+                  "  const d = pm.response.json().data;",
+                  "  pm.collectionVariables.set('submission_id', d.submission_id || '');",
+                  "  console.log('Flag: ' + d.flag_level + ' | Score: ' + (d.ensemble_score * 100).toFixed(1) + '%');",
+                  "  if (d.flag_level === 'REVIEW' || d.flag_level === 'INTERVIEW') {",
+                  "    console.log('📧 Инструктор получит email-уведомление!');",
+                  "  }",
+                  "}"
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "POST /submissions/analyze — 🚨 INTERVIEW (enterprise-код от новичка)",
+          ],
           "request": {
             "method": "POST",
-            "url": "{{base_url}}/submissions/analyze",
             "header": [
               { "key": "Authorization", "value": "Bearer {{student_token}}" },
-              { "key": "Content-Type",   "value": "application/json" }
+              { "key": "Content-Type", "value": "application/json" }
             ],
+            "url": "{{base_url}}/submissions/analyze",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"week_number\": 4,\n  \"language\": \"python\",\n  \"code\": \"from abc import ABC, abstractmethod\\nfrom typing import Optional, List, Dict\\nfrom dataclasses import dataclass\\n\\n@dataclass\\nclass StudentRecord:\\n    id: int\\n    name: str\\n    grade: float\\n\\nclass BaseRepository(ABC):\\n    @abstractmethod\\n    async def find_by_id(self, id: int) -> Optional[StudentRecord]:\\n        pass\\n\\nclass StudentRepository(BaseRepository):\\n    def __init__(self, db_connection: object):\\n        self._db = db_connection\\n        self._cache: Dict[int, StudentRecord] = {}\\n\\n    async def find_by_id(self, id: int) -> Optional[StudentRecord]:\\n        if id in self._cache:\\n            return self._cache[id]\\n        try:\\n            result = await self._db.query(f\\\"SELECT * FROM students WHERE id = {id}\\\")\\n            return StudentRecord(**result)\\n        except Exception as e:\\n            raise RuntimeError(f\\\"Database error: {e}\\\") from e\\n\\nclass GradeService:\\n    def __init__(self, repo: BaseRepository):\\n        self._repo = repo\\n\\n    async def get_top_students(self, threshold: float) -> List[StudentRecord]:\\n        students = await self._repo.find_all()\\n        return [s for s in students if s.grade >= threshold]\\n\"\n}"
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"week_number\": 3,\n  \"language\": \"python\",\n  \"code\": \"from abc import ABC, abstractmethod\\nfrom typing import Generic, TypeVar, Optional, Protocol\\nfrom dataclasses import dataclass, field\\nfrom contextlib import contextmanager\\nimport asyncio\\nimport logging\\n\\nT = TypeVar('T')\\nlogger = logging.getLogger(__name__)\\n\\n\\nclass Repository(Protocol[T]):\\n    def find_by_id(self, id: int) -> Optional[T]: ...\\n    def save(self, entity: T) -> T: ...\\n\\n\\n@dataclass\\nclass UserEntity:\\n    id: int\\n    name: str\\n    permissions: list[str] = field(default_factory=list)\\n\\n\\nclass AbstractService(ABC, Generic[T]):\\n    def __init__(self, repo: Repository[T]) -> None:\\n        self._repo = repo\\n        self._cache: dict[int, T] = {}\\n\\n    @abstractmethod\\n    def validate(self, entity: T) -> bool: ...\\n\\n    @contextmanager\\n    def transaction(self):\\n        logger.info('Starting transaction')\\n        try:\\n            yield self\\n            logger.info('Transaction committed')\\n        except Exception as exc:\\n            logger.error('Transaction rolled back: %s', exc)\\n            raise\\n\\n    async def fetch_async(self, id: int) -> Optional[T]:\\n        if id in self._cache:\\n            return self._cache[id]\\n        loop = asyncio.get_event_loop()\\n        result = await loop.run_in_executor(None, self._repo.find_by_id, id)\\n        if result:\\n            self._cache[id] = result\\n        return result\\n\"\n}"
             }
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const d = pm.response.json().data;",
-                  "pm.collectionVariables.set('submission_id', d.submission_id || '');",
-                  "pm.test('🚨 flag_level = INTERVIEW', () => pm.expect(d.flag_level).to.eql('INTERVIEW'));",
-                  "pm.test('ensemble_score высокий (≥0.80)', () => pm.expect(d.ensemble_score).to.be.at.least(0.80));",
-                  "pm.test('needs_interview = true', () => pm.expect(d.needs_interview).to.be.true);",
-                  "pm.test('jump_ratio огромный', () => pm.expect(d.jump_ratio).to.be.above(5));",
-                  "pm.test('Есть genealogy_violations', () => pm.expect(d.genealogy_violations.length).to.be.above(0));",
-                  "pm.test('Есть score_breakdown', () => pm.expect(d).to.have.property('score_breakdown'));"
-                ]
-              }
-            }
-          ]
+          }
         },
         {
-          "name": "GET /submissions/:id — получить результат",
+          "name": "Получить сабмишн по ID",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/submissions/{{submission_id}}",
-            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Есть данные', () => pm.expect(pm.response.json().data).to.have.property('id'));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
+            "url": "{{base_url}}/submissions/{{submission_id}}"
+          }
         },
         {
-          "name": "GET /submissions — список (студент видит только свои)",
+          "name": "Список (студент — только свои)",
           "request": {
             "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
             "url": {
-              "raw": "{{base_url}}/submissions?course_id={{course_id}}&limit=10",
-              "query": [
-                { "key": "course_id", "value": "{{course_id}}" },
-                { "key": "limit",     "value": "10" }
-              ]
-            },
-            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const body = pm.response.json();",
-                  "pm.test('Есть pagination', () => pm.expect(body).to.have.property('pagination'));",
-                  "pm.test('Данные — массив', () => pm.expect(body.data).to.be.an('array'));"
-                ]
-              }
+              "raw": "{{base_url}}/submissions?limit=10",
+              "query": [{ "key": "limit", "value": "10" }]
             }
-          ]
+          }
         },
         {
-          "name": "GET /submissions — инструктор фильтрует по флагу",
+          "name": "Список (инструктор — фильтр по INTERVIEW)",
           "request": {
             "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
             "url": {
-              "raw": "{{base_url}}/submissions?course_id={{course_id}}&flag_level=INTERVIEW&sort=-ensemble_score",
+              "raw": "{{base_url}}/submissions?flag_level=INTERVIEW&course_id={{course_id}}",
               "query": [
-                { "key": "course_id",  "value": "{{course_id}}" },
                 { "key": "flag_level", "value": "INTERVIEW" },
-                { "key": "sort",       "value": "-ensemble_score" }
+                { "key": "course_id", "value": "{{course_id}}" }
               ]
-            },
-            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }]
-          },
+            }
+          }
+        },
+        {
+          "name": "❌ 422 — неподдерживаемый язык",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{student_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/submissions/analyze",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"course_id\": \"{{course_id}}\",\n  \"week_number\": 2,\n  \"language\": \"java\",\n  \"code\": \"System.out.println('hello');\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 · Instructor Queue",
+      "item": [
+        {
+          "name": "Очередь PENDING ✦ сохраняет queue_item_id",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "const data = pm.response.json().data;",
-                  "pm.test('Все записи INTERVIEW', () => {",
-                  "  data.forEach(s => pm.expect(s.flag_level).to.eql('INTERVIEW'));",
-                  "});"
+                  "if (pm.response.code === 200) {",
+                  "  const items = pm.response.json().data;",
+                  "  if (items && items.length > 0) {",
+                  "    pm.collectionVariables.set('queue_item_id', items[0].id);",
+                  "    console.log('✅ queue_item_id сохранён: ' + items[0].id);",
+                  "    console.log('Флаг: ' + items[0].submission.flagLevel + ' | Score: ' + (items[0].priority_score * 100).toFixed(1) + '%');",
+                  "  } else {",
+                  "    console.log('Очередь пуста — сначала запусти INTERVIEW-анализ');",
+                  "  }",
+                  "}"
                 ]
               }
             }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "05 · Instructor Queue",
-      "item": [
-        {
-          "name": "GET /instructor/queue — очередь на проверку",
+          ],
           "request": {
             "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
             "url": {
               "raw": "{{base_url}}/instructor/queue?status=PENDING",
               "query": [{ "key": "status", "value": "PENDING" }]
-            },
-            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
-                  "pm.test('Есть массив', () => pm.expect(pm.response.json().data).to.be.an('array'));"
-                ]
-              }
             }
-          ]
+          }
+        },
+        {
+          "name": "Детали queue item",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/instructor/queue/{{queue_item_id}}"
+          }
+        },
+        {
+          "name": "Разрешить — CLEARED (студент честный)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/instructor/queue/{{queue_item_id}}/resolve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CLEARED\",\n  \"instructor_note\": \"Студент объяснил код на интервью, всё ок\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Разрешить — CONFIRMED (плагиат подтверждён)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/instructor/queue/{{queue_item_id}}/resolve",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONFIRMED\",\n  \"instructor_note\": \"Студент не смог объяснить ни одну строку кода\"\n}"
+            }
+          }
         }
       ]
     },
     {
-      "name": "06 · Edge Cases",
+      "name": "09 · Edge Cases",
       "item": [
         {
-          "name": "GET /nonexistent — 404 обработчик",
+          "name": "❌ 404 — несуществующий роут",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/nonexistent-route"
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('404 NOT_FOUND', () => pm.response.to.have.status(404));",
-                  "pm.test('Код NOT_FOUND', () => pm.expect(pm.response.json().error).to.eql('NOT_FOUND'));"
-                ]
-              }
-            }
-          ]
+            "url": "{{base_url}}/nonexistent"
+          }
         },
         {
-          "name": "GET /auth/me — 401 невалидный токен",
+          "name": "❌ 401 — фейковый токен",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/auth/me",
-            "header": [{ "key": "Authorization", "value": "Bearer eyJhbGciOiJIUzI1NiJ9.fake.signature" }]
-          },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('401 UNAUTHORIZED', () => pm.response.to.have.status(401));"
-                ]
-              }
-            }
-          ]
+            "header": [{ "key": "Authorization", "value": "Bearer fake.token.here" }],
+            "url": "{{base_url}}/auth/me"
+          }
+        },
+        {
+          "name": "❌ 404 — сабмишн не существует",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
+            "url": "{{base_url}}/submissions/nonexistent-id-123"
+          }
         }
       ]
     }

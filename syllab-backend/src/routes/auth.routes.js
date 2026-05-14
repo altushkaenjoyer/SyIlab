@@ -23,4 +23,9 @@ router.post('/resend-verification', rateLimitAuth, validate(resendVerificationSc
 router.post('/forgot-password', rateLimitAuth, validate(forgotPasswordSchema), ctrl.forgotPassword);
 router.post('/reset-password', validate(resetPasswordSchema), ctrl.resetPassword);
 
+// DEV ONLY — достаёт токены из БД без email, недоступен в production
+if (process.env.NODE_ENV !== 'production') {
+  router.get('/dev/token', ctrl.devGetToken);
+}
+
 module.exports = router;

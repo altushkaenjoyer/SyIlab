@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "worker": "node workers/email.worker.js",
+    "worker:dev": "nodemon workers/email.worker.js",
     "test": "jest --runInBand --forceExit",
     "test:unit": "jest tests/unit --runInBand",
     "test:integration": "jest tests/integration --runInBand --forceExit",

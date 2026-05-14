@@ -15,6 +15,7 @@ RUN npx prisma generate
 
 # Copy source
 COPY src ./src
+COPY workers ./workers
 COPY openapi.yaml ./openapi.yaml
 
 # Non-root user for security
