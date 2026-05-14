@@ -136,10 +136,12 @@ async function devGetToken(req, res, next) {
       return res.status(400).json({ error: 'email query param required' });
     }
     const prisma = getClient();
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email },
       select: {
+        id: true,
         email: true,
+        role: true,
         emailVerified: true,
         verificationToken: true,
         passwordResetTokens: {
@@ -151,12 +153,35 @@ async function devGetToken(req, res, next) {
       },
     });
     if (!user) return res.status(404).json({ error: 'User not found' });
+
+    // If unverified but token was cleared, regenerate so testing can continue
+    if (!user.emailVerified && !user.verificationToken) {
+      const { randomBytes } = require('crypto');
+      const newToken = randomBytes(32).toString('hex');
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { verificationToken: newToken },
+        select: {
+          id: true, email: true, role: true, emailVerified: true, verificationToken: true,
+          passwordResetTokens: {
+            where: { usedAt: null },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+            select: { tokenHash: true, expiresAt: true },
+          },
+        },
+      });
+    }
+
     return res.status(200).json({
       email: user.email,
+      role: user.role,
       email_verified: user.emailVerified,
       verification_token: user.verificationToken ?? null,
       reset_token_hash: user.passwordResetTokens[0]?.tokenHash ?? null,
-      note: 'reset_token_hash is the SHA-256 hash — the raw token was only in the email. Use forgot-password to get a fresh one.',
+      hint: user.emailVerified
+        ? 'Email already verified — go straight to POST /auth/login'
+        : 'Use verification_token with POST /auth/verify-email, then login',
     });
   } catch (err) {
     next(err);

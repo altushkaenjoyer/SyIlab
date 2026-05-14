@@ -14,7 +14,7 @@
     { "key": "session_id", "value": "", "type": "string" },
     { "key": "submission_id", "value": "", "type": "string" },
     { "key": "queue_item_id", "value": "", "type": "string" },
-    { "key": "course_id", "value": "demo-course-cs101", "type": "string" },
+    { "key": "course_id", "value": "", "type": "string" },
     { "key": "student_email", "value": "student@test.com", "type": "string" },
     { "key": "instructor_email", "value": "instructor@test.com", "type": "string" }
   ],
@@ -140,10 +140,7 @@
           ],
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/auth/dev/token?email={{student_email}}",
-              "query": [{ "key": "email", "value": "{{student_email}}" }]
-            }
+            "url": "{{base_url}}/auth/dev/token?email={{student_email}}"
           }
         },
         {
@@ -193,12 +190,18 @@
                 "exec": [
                   "if (pm.response.code === 200) {",
                   "  const d = pm.response.json();",
+                  "  console.log('Role: ' + d.role + ' | email_verified: ' + d.email_verified);",
                   "  if (d.verification_token) {",
                   "    pm.collectionVariables.set('verification_token', d.verification_token);",
                   "    console.log('✅ verification_token сохранён! Запускай «Верификация email»');",
+                  "  } else if (d.email_verified) {",
+                  "    console.log('✅ ' + d.hint);",
+                  "    console.log('Сразу иди в «Логин инструктора» — верификация не нужна');",
                   "  } else {",
-                  "    console.log('Email уже верифицирован: ' + d.email_verified);",
+                  "    console.log('⚠️ Токен не найден и email не верифицирован — странная ситуация');",
                   "  }",
+                  "} else {",
+                  "  console.log('❌ ' + pm.response.code + ': ' + pm.response.json().error);",
                   "}"
                 ]
               }
@@ -206,10 +209,7 @@
           ],
           "request": {
             "method": "GET",
-            "url": {
-              "raw": "{{base_url}}/auth/dev/token?email={{instructor_email}}",
-              "query": [{ "key": "email", "value": "{{instructor_email}}" }]
-            }
+            "url": "{{base_url}}/auth/dev/token?email={{instructor_email}}"
           }
         },
         {
@@ -438,7 +438,105 @@
       ]
     },
     {
-      "name": "05 · RBAC (защита ролей)",
+      "name": "05 · Courses (курсы)",
+      "item": [
+        {
+          "name": "Создать курс ✦ сохраняет course_id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const id = pm.response.json().data.id;",
+                  "  pm.collectionVariables.set('course_id', id);",
+                  "  console.log('✅ course_id сохранён: ' + id);",
+                  "  console.log('Следующий шаг: «Записать студента на курс»');",
+                  "} else {",
+                  "  console.log('❌ ' + pm.response.json().message);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/courses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Алгоритмы и структуры данных 2025\",\n  \"institution_name\": \"Университет Тест\",\n  \"cohort_name\": \"Группа А\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Список курсов",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/courses"
+          }
+        },
+        {
+          "name": "Записать студента на курс",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  console.log('✅ Студент записан на курс!');",
+                  "  console.log('Следующий шаг: создай сессию в разделе «Sessions»');",
+                  "} else {",
+                  "  console.log('❌ ' + pm.response.json().message);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{instructor_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/courses/{{course_id}}/enroll",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"student_email\": \"{{student_email}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Список студентов курса",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
+            "url": "{{base_url}}/courses/{{course_id}}/students"
+          }
+        },
+        {
+          "name": "❌ 403 — студент создаёт курс",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{student_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{base_url}}/courses",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Попытка студента\",\n  \"institution_name\": \"Тест\",\n  \"cohort_name\": \"Группа Б\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 · RBAC (защита ролей)",
       "item": [
         {
           "name": "❌ 403 — студент создаёт сессию",
@@ -637,10 +735,7 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{student_token}}" }],
-            "url": {
-              "raw": "{{base_url}}/submissions?limit=10",
-              "query": [{ "key": "limit", "value": "10" }]
-            }
+            "url": "{{base_url}}/submissions?limit=10"
           }
         },
         {
@@ -648,13 +743,7 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
-            "url": {
-              "raw": "{{base_url}}/submissions?flag_level=INTERVIEW&course_id={{course_id}}",
-              "query": [
-                { "key": "flag_level", "value": "INTERVIEW" },
-                { "key": "course_id", "value": "{{course_id}}" }
-              ]
-            }
+            "url": "{{base_url}}/submissions?flag_level=INTERVIEW&course_id={{course_id}}"
           }
         },
         {
@@ -701,10 +790,7 @@
           "request": {
             "method": "GET",
             "header": [{ "key": "Authorization", "value": "Bearer {{instructor_token}}" }],
-            "url": {
-              "raw": "{{base_url}}/instructor/queue?status=PENDING",
-              "query": [{ "key": "status", "value": "PENDING" }]
-            }
+            "url": "{{base_url}}/instructor/queue?status=PENDING"
           }
         },
         {

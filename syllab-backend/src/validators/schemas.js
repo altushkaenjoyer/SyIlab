@@ -49,6 +49,20 @@ const resetPasswordSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number'),
 });
 
+// ── Course schemas ─────────────────────────────────────────────────────────
+
+const createCourseSchema = z.object({
+  name: z.string().min(2).max(200),
+  institution_name: z.string().min(2).max(200),
+  cohort_name: z.string().min(2).max(100),
+  alert_threshold: z.number().min(0).max(10).optional(),
+  max_violations: z.number().int().min(1).max(50).optional(),
+});
+
+const enrollStudentSchema = z.object({
+  student_email: z.string().email(),
+});
+
 // ── Session schemas ────────────────────────────────────────────────────────
 
 const createSessionSchema = z.object({
@@ -109,6 +123,8 @@ module.exports = {
   resendVerificationSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  createCourseSchema,
+  enrollStudentSchema,
   createSessionSchema,
   openSessionSchema,
   closeSessionSchema,

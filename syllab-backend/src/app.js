@@ -15,6 +15,7 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 // Routes
 const authRoutes        = require('./routes/auth.routes');
+const coursesRoutes     = require('./routes/courses.routes');
 const sessionsRoutes    = require('./routes/sessions.routes');
 const submissionsRoutes = require('./routes/submissions.routes');
 const queueRoutes       = require('./routes/queue.routes');
@@ -66,6 +67,7 @@ app.get('/health', (req, res) => {
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 app.use('/auth', authRoutes);
+app.use('/courses', coursesRoutes);
 app.use('/sessions', sessionsRoutes);
 app.use('/submissions', submissionsRoutes);
 app.use('/instructor/queue', queueRoutes);

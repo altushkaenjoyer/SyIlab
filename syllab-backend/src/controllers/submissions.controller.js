@@ -141,19 +141,9 @@ async function analyze(req, res, next) {
 
     const result = computeEnsemble(scoringParams);
 
-    if (result.flagLevel === 'INSUFFICIENT_BASELINE') {
-      return res.status(200).json({
-        data: {
-          flag_level: 'NORMAL',
-          ensemble_score: 0,
-          message: result.message,
-          sophistication: { total_score: currentScore },
-        },
-      });
-    }
-
-    // 9. Persist submission in transaction
-    const flagLevel = scoreToFlagLevel(result.score);
+    // 9. Persist submission in transaction (always — histCount must grow)
+    const isInsufficient = result.flagLevel === 'INSUFFICIENT_BASELINE';
+    const flagLevel = isInsufficient ? 'NORMAL' : scoreToFlagLevel(result.score);
     const expectedScore = baselineF.totalScore * Math.pow(1.15, week_number - 1);
     const z_cd = cd_std > 0 ? (currentFeatures.commentDensity - baselineF.commentDensity) / cd_std : 0;
     const z_nv = nv_std > 0 ? (currentFeatures.namingVerbosity - baselineF.namingVerbosity) / nv_std : 0;
@@ -167,7 +157,7 @@ async function analyze(req, res, next) {
           courseId: course_id,
           weekNumber: week_number,
           language,
-          ensembleScore: result.score,
+          ensembleScore: isInsufficient ? null : result.score,
           flagLevel,
         },
       });
@@ -192,10 +182,10 @@ async function analyze(req, res, next) {
           cyclomaticAvg:       currentFeatures.cyclomaticAvg,
           maxNestingDepth:     currentFeatures.maxNestingDepth,
           expectedScore:       Math.round(expectedScore),
-          jumpRatio:           result.breakdown.jump_ratio,
-          trajectoryZ:         z_coh,
-          cohortPercentile:    pct,
-          weeksCompressed:     result.breakdown.jump_ratio,
+          jumpRatio:           isInsufficient ? 1.0 : result.breakdown.jump_ratio,
+          trajectoryZ:         isInsufficient ? 0 : z_coh,
+          cohortPercentile:    isInsufficient ? 50 : pct,
+          weeksCompressed:     isInsufficient ? 0 : result.breakdown.jump_ratio,
           regressionRatio:     prevSophScore > 0 ? currentScore / prevSophScore : 1,
           zCommentDensity:     z_cd,
           zNamingVerbosity:    z_nv,
@@ -228,6 +218,17 @@ async function analyze(req, res, next) {
 
       return sub;
     });
+
+    if (isInsufficient) {
+      return res.status(200).json({
+        data: {
+          flag_level: 'NORMAL',
+          ensemble_score: 0,
+          message: result.message,
+          sophistication: { total_score: currentScore },
+        },
+      });
+    }
 
     // 10. Update cohort stats asynchronously (fire and forget)
     updateCohortStats(course_id, week_number, course?.cohortId).catch(() => {});
